@@ -64,7 +64,7 @@
           "subdir": "jsonnet/kube-state-metrics"
         }
       },
-      "version": "master"
+      "version": "main"
     },
     {
       "source": {
@@ -73,7 +73,7 @@
           "subdir": "jsonnet/kube-state-metrics-mixin"
         }
       },
-      "version": "master"
+      "version": "main"
     },
     {
       "source": {
@@ -108,10 +108,11 @@
       "source": {
         "git": {
           "remote": "https://github.com/pyrra-dev/pyrra.git",
-          "subdir": "config/crd/bases"
+          "subdir": "jsonnet/controller-gen"
         }
       },
-      "version": "main"
+      "version": "release-0.7",
+      "name": "pyrra"
     },
     {
       "source": {

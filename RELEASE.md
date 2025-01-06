@@ -1,10 +1,12 @@
 # Release schedule
 
-Kube-prometheus has a somehow predictable release schedule, releases were
-historically cut in sync with OpenShift releases as per downstream needs. So
-far there hasn't been any problem with this schedule since it is also in sync
-with Kubernetes releases. So for every new Kubernetes release, there is a new
-release of kube-prometheus, although it tends to happen later.
+kube-prometheus will follow the Kubernetes release schedule.
+For every new Kubernetes release, there will be a corresponding minor release of
+kube-prometheus, although it may not be immediate.
+
+We do not guarantee backports from the `main` branch to older release branches.
+
+This differs from the previous release schedule, which was driven by OpenShift releases.
 
 # How to cut a new release
 
@@ -18,23 +20,9 @@ We use [Semantic Versioning](http://semver.org/).
 We maintain a separate branch for each minor release, named
 `release-<major>.<minor>`, e.g. `release-1.1`, `release-2.0`.
 
-The usual flow is to merge new features and changes into the master branch and
-to merge bug fixes into the latest release branch. Bug fixes are then merged
-into master from the latest release branch. The master branch should always
-contain all commits from the latest release branch.
-
-If a bug fix got accidentally merged into master, cherry-pick commits have to be
-created in the latest release branch, which then has to be merged back into
-master. Try to avoid that situation.
-
-Maintaining the release branches for older minor releases happens on a best
-effort basis.
-
-## Cut a release of kubernetes-mixins
-
-kube-prometheus and kubernetes-mixins releases are tied, so before cutting the
-release of kube-prometheus we should make sure that the same release of
-kubernetes-mixins exists.
+The usual flow is to merge new features, changes and bug fixes into the `main` branch.
+The decision to backport bugfixes into release branches is made on a case-by-case basis.
+Maintaining the release branches for older minor releases is best-effort.
 
 ## Update components version
 
@@ -50,12 +38,12 @@ failed or because the main branch was already up-to-date.
 
 ## Update Kubernetes supported versions
 
-The main branch of kube-prometheus should support the last 2 versions of
+The `main` branch of kube-prometheus should support the last 2 versions of
 Kubernetes. We need to make sure that the CI on the main branch is testing the
 kube-prometheus configuration against both of these versions by updating the [CI
 worklow](.github/workflows/ci.yaml) to include the latest kind version and the
 2 latest images versions that are attached to the kind release. Once that is
-done, the [compatibility matrix](README.md#kubernetes-compatibility-matrix) in
+done, the [compatibility matrix](README.md#compatibility) in
 the README should also be updated to reflect the CI changes.
 
 ## Create pull request to cut the release
@@ -87,7 +75,7 @@ make generate
 
 ### Update the compatibility matrix
 
-Update the [compatibility matrix](README.md#kubernetes-compatibility-matrix) in
+Update the [compatibility matrix](README.md#compatibility) in
 the README, by adding the new release based on the `main` branch compatibility
 and removing the oldest release branch to only keep the latest 5 branches in the
 matrix.
