@@ -37,7 +37,7 @@
     _config:: defaults + params,
 
     crd: (
-      import 'github.com/pyrra-dev/pyrra/config/crd/bases/pyrra.dev_servicelevelobjectives.json'
+      import 'github.com/pyrra-dev/pyrra/jsonnet/controller-gen/pyrra.dev_servicelevelobjectives.json'
     ),
 
 
@@ -73,13 +73,16 @@
         args: [
           'api',
           '--api-url=http://%s.%s.svc.cluster.local:9444' % [pyrra.kubernetesService.metadata.name, pyrra.kubernetesService.metadata.namespace],
-          '--prometheus-url=http://prometheus-k8s.monitoring.svc.cluster.local:9090',
+          '--prometheus-url=http://prometheus-k8s.%s.svc.cluster.local:9090' % pyrra._config.namespace,
         ],
         // resources: pyrra._config.resources,
         ports: [{ containerPort: pyrra._config.port }],
         securityContext: {
           allowPrivilegeEscalation: false,
           readOnlyRootFilesystem: true,
+          runAsNonRoot: true,
+          capabilities: { drop: ['ALL'] },
+          seccompProfile: { type: 'RuntimeDefault' },
         },
       };
 
@@ -242,10 +245,10 @@
         indicator: {
           ratio: {
             errors: {
-              metric: 'apiserver_request_total{job="apiserver",verb=~"LIST|GET",code=~"5.."}',
+              metric: 'apiserver_request_total{component="apiserver",verb=~"LIST|GET",code=~"5.."}',
             },
             total: {
-              metric: 'apiserver_request_total{job="apiserver",verb=~"LIST|GET"}',
+              metric: 'apiserver_request_total{component="apiserver",verb=~"LIST|GET"}',
             },
           },
         },
@@ -270,10 +273,10 @@
         indicator: {
           ratio: {
             errors: {
-              metric: 'apiserver_request_total{job="apiserver",verb=~"POST|PUT|PATCH|DELETE",code=~"5.."}',
+              metric: 'apiserver_request_total{component="apiserver",verb=~"POST|PUT|PATCH|DELETE",code=~"5.."}',
             },
             total: {
-              metric: 'apiserver_request_total{job="apiserver",verb=~"POST|PUT|PATCH|DELETE"}',
+              metric: 'apiserver_request_total{component="apiserver",verb=~"POST|PUT|PATCH|DELETE"}',
             },
           },
         },
@@ -298,10 +301,10 @@
         indicator: {
           latency: {
             success: {
-              metric: 'apiserver_request_duration_seconds_bucket{job="apiserver",scope=~"resource|",verb=~"LIST|GET",le="0.1"}',
+              metric: 'apiserver_request_duration_seconds_bucket{component="apiserver",scope=~"resource|",verb=~"LIST|GET",le="0.1"}',
             },
             total: {
-              metric: 'apiserver_request_duration_seconds_count{job="apiserver",scope=~"resource|",verb=~"LIST|GET"}',
+              metric: 'apiserver_request_duration_seconds_count{component="apiserver",scope=~"resource|",verb=~"LIST|GET"}',
             },
           },
         },
@@ -326,10 +329,10 @@
         indicator: {
           latency: {
             success: {
-              metric: 'apiserver_request_duration_seconds_bucket{job="apiserver",scope=~"namespace|",verb=~"LIST|GET",le="5"}',
+              metric: 'apiserver_request_duration_seconds_bucket{component="apiserver",scope=~"namespace|",verb=~"LIST|GET",le="5"}',
             },
             total: {
-              metric: 'apiserver_request_duration_seconds_count{job="apiserver",scope=~"namespace|",verb=~"LIST|GET"}',
+              metric: 'apiserver_request_duration_seconds_count{component="apiserver",scope=~"namespace|",verb=~"LIST|GET"}',
             },
           },
         },
@@ -354,10 +357,10 @@
         indicator: {
           latency: {
             success: {
-              metric: 'apiserver_request_duration_seconds_bucket{job="apiserver",scope=~"cluster|",verb=~"LIST|GET",le="5"}',
+              metric: 'apiserver_request_duration_seconds_bucket{component="apiserver",scope=~"cluster|",verb=~"LIST|GET",le="5"}',
             },
             total: {
-              metric: 'apiserver_request_duration_seconds_count{job="apiserver",scope=~"cluster|",verb=~"LIST|GET"}',
+              metric: 'apiserver_request_duration_seconds_count{component="apiserver",scope=~"cluster|",verb=~"LIST|GET"}',
             },
           },
         },

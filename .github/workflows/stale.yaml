@@ -1,13 +1,13 @@
 name: 'Close stale issues and PRs'
 on:
   schedule:
-    - cron: '30 1 * * *'
+    - cron: '30 3 * * *'
 
 jobs:
   stale:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/stale@v5
+      - uses: actions/stale@v9
         with:
           stale-issue-message: 'This issue has been automatically marked as stale because it has not had any activity in the last 60 days. Thank you for your contributions.'
           close-issue-message: 'This issue was closed because it has not had any activity in the last 120 days. Please reopen if you feel this is still valid.'
@@ -18,3 +18,4 @@ jobs:
           stale-issue-label: 'stale'
           stale-pr-label: 'stale'
           exempt-draft-pr: true
+          operations-per-run: 500

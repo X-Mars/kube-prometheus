@@ -31,22 +31,27 @@ local defaults = {
     nodeExporter: '4m',
     windowsExporter: '4m',
   },
+  containerMetricsPrefix:: '',
 
   prometheusURL:: error 'must provide prometheusURL',
+  containerQuerySelector:: '',
+  nodeQuerySelector:: '',
   config:: {
+    local containerSelector = if $.containerQuerySelector != '' then ',' + $.containerQuerySelector else '',
+    local nodeSelector = if $.nodeQuerySelector != '' then ',' + $.nodeQuerySelector else '',
     resourceRules: {
       cpu: {
         containerQuery: |||
           sum by (<<.GroupBy>>) (
             irate (
-                container_cpu_usage_seconds_total{<<.LabelMatchers>>,container!="",pod!=""}[%(kubelet)s]
+                %(containerMetricsPrefix)scontainer_cpu_usage_seconds_total{<<.LabelMatchers>>,container!="",pod!=""%(addtionalSelector)s}[%(kubelet)s]
             )
           )
-        ||| % $.rangeIntervals,
+        ||| % { kubelet: $.rangeIntervals.kubelet, containerMetricsPrefix: $.containerMetricsPrefix, addtionalSelector: containerSelector },
         nodeQuery: |||
           sum by (<<.GroupBy>>) (
             1 - irate(
-              node_cpu_seconds_total{mode="idle"}[%(nodeExporter)s]
+              node_cpu_seconds_total{mode="idle"%(addtionalSelector)s}[%(nodeExporter)s]
             )
             * on(namespace, pod) group_left(node) (
               node_namespace_pod:kube_pod_info:{<<.LabelMatchers>>}
@@ -54,10 +59,10 @@ local defaults = {
           )
           or sum by (<<.GroupBy>>) (
             1 - irate(
-              windows_cpu_time_total{mode="idle", job="windows-exporter",<<.LabelMatchers>>}[%(windowsExporter)s]
+              windows_cpu_time_total{mode="idle", job="windows-exporter",<<.LabelMatchers>>%(addtionalSelector)s}[%(windowsExporter)s]
             )
           )
-        ||| % $.rangeIntervals,
+        ||| % { nodeExporter: $.rangeIntervals.nodeExporter, windowsExporter: $.rangeIntervals.windowsExporter, containerMetricsPrefix: $.containerMetricsPrefix, addtionalSelector: nodeSelector },
         resources: {
           overrides: {
             node: { resource: 'node' },
@@ -70,21 +75,21 @@ local defaults = {
       memory: {
         containerQuery: |||
           sum by (<<.GroupBy>>) (
-            container_memory_working_set_bytes{<<.LabelMatchers>>,container!="",pod!=""}
+            %(containerMetricsPrefix)scontainer_memory_working_set_bytes{<<.LabelMatchers>>,container!="",pod!=""%(addtionalSelector)s}
           )
-        |||,
+        ||| % { containerMetricsPrefix: $.containerMetricsPrefix, addtionalSelector: containerSelector },
         nodeQuery: |||
           sum by (<<.GroupBy>>) (
-            node_memory_MemTotal_bytes{job="node-exporter",<<.LabelMatchers>>}
+            node_memory_MemTotal_bytes{job="node-exporter",<<.LabelMatchers>>%(addtionalSelector)s}
             -
-            node_memory_MemAvailable_bytes{job="node-exporter",<<.LabelMatchers>>}
+            node_memory_MemAvailable_bytes{job="node-exporter",<<.LabelMatchers>>%(addtionalSelector)s}
           )
           or sum by (<<.GroupBy>>) (
-            windows_cs_physical_memory_bytes{job="windows-exporter",<<.LabelMatchers>>}
+            windows_cs_physical_memory_bytes{job="windows-exporter",<<.LabelMatchers>>%(addtionalSelector)s}
             -
-            windows_memory_available_bytes{job="windows-exporter",<<.LabelMatchers>>}
+            windows_memory_available_bytes{job="windows-exporter",<<.LabelMatchers>>%(addtionalSelector)s}
           )
-        |||,
+        ||| % { containerMetricsPrefix: $.containerMetricsPrefix, addtionalSelector: nodeSelector },
         resources: {
           overrides: {
             instance: { resource: 'node' },
@@ -125,6 +130,11 @@ function(params) {
   _metadata:: {
     name: pa._config.name,
     namespace: pa._config.namespace,
+    labels: pa._config.commonLabels,
+  },
+
+  _metadata_no_ns:: {
+    name: pa._config.name,
     labels: pa._config.commonLabels,
   },
 
@@ -228,20 +238,27 @@ function(params) {
       args: [
         '--cert-dir=/var/run/serving-cert',
         '--config=/etc/adapter/config.yaml',
-        '--logtostderr=true',
         '--metrics-relist-interval=1m',
         '--prometheus-url=' + pa._config.prometheusURL,
         '--secure-port=6443',
         '--tls-cipher-suites=' + std.join(',', pa._config.tlsCipherSuites),
       ],
       resources: pa._config.resources,
+      startupProbe: {
+        httpGet: {
+          path: '/livez',
+          port: 'https',
+          scheme: 'HTTPS',
+        },
+        periodSeconds: 10,
+        failureThreshold: 18,
+      },
       readinessProbe: {
         httpGet: {
           path: '/readyz',
           port: 'https',
           scheme: 'HTTPS',
         },
-        initialDelaySeconds: 30,
         periodSeconds: 5,
         failureThreshold: 5,
       },
@@ -251,7 +268,6 @@ function(params) {
           port: 'https',
           scheme: 'HTTPS',
         },
-        initialDelaySeconds: 30,
         periodSeconds: 5,
         failureThreshold: 5,
       },
@@ -264,7 +280,9 @@ function(params) {
       securityContext: {
         allowPrivilegeEscalation: false,
         readOnlyRootFilesystem: true,
+        runAsNonRoot: true,
         capabilities: { drop: ['ALL'] },
+        seccompProfile: { type: 'RuntimeDefault' },
       },
     };
 
@@ -284,7 +302,12 @@ function(params) {
           },
         },
         template: {
-          metadata: { labels: pa._config.commonLabels },
+          metadata: {
+            annotations: {
+              'checksum.config/md5': std.md5(std.manifestYamlDoc(pa._config.config)),
+            },
+            labels: pa._config.commonLabels,
+          },
           spec: {
             containers: [c],
             serviceAccountName: $.serviceAccount.metadata.name,
@@ -310,7 +333,7 @@ function(params) {
   clusterRole: {
     apiVersion: 'rbac.authorization.k8s.io/v1',
     kind: 'ClusterRole',
-    metadata: pa._metadata,
+    metadata: pa._metadata_no_ns,
     rules: [{
       apiGroups: [''],
       resources: ['nodes', 'namespaces', 'pods', 'services'],
@@ -321,7 +344,7 @@ function(params) {
   clusterRoleBinding: {
     apiVersion: 'rbac.authorization.k8s.io/v1',
     kind: 'ClusterRoleBinding',
-    metadata: pa._metadata,
+    metadata: pa._metadata_no_ns,
     roleRef: {
       apiGroup: 'rbac.authorization.k8s.io',
       kind: 'ClusterRole',
@@ -337,7 +360,7 @@ function(params) {
   clusterRoleBindingDelegator: {
     apiVersion: 'rbac.authorization.k8s.io/v1',
     kind: 'ClusterRoleBinding',
-    metadata: pa._metadata {
+    metadata: pa._metadata_no_ns {
       name: 'resource-metrics:system:auth-delegator',
     },
     roleRef: {
@@ -355,7 +378,7 @@ function(params) {
   clusterRoleServerResources: {
     apiVersion: 'rbac.authorization.k8s.io/v1',
     kind: 'ClusterRole',
-    metadata: pa._metadata {
+    metadata: pa._metadata_no_ns {
       name: 'resource-metrics-server-resources',
     },
     rules: [{
@@ -368,7 +391,7 @@ function(params) {
   clusterRoleAggregatedMetricsReader: {
     apiVersion: 'rbac.authorization.k8s.io/v1',
     kind: 'ClusterRole',
-    metadata: pa._metadata {
+    metadata: pa._metadata_no_ns {
       name: 'system:aggregated-metrics-reader',
       labels+: {
         'rbac.authorization.k8s.io/aggregate-to-admin': 'true',
